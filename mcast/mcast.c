@@ -17,11 +17,20 @@ static void multicast_send() {
 	}
 	printf("Socket opened\n");
 
-	struct sockaddr_in groupsock;
-	memset(&groupsock, 0, sizeof(struct sockaddr_in));
-	groupsock.sin_family = AF_INET;
-	groupsock.sin_port = htons(4321);
-	groupsock.sin_addr.s_addr = inet_addr("239.100.100.100");
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+
+	struct addrinfo* res;
+
+	int wut = getaddrinfo("239.100.100.100", "4321", &hints, &res);
+	if (wut != 0) {
+		fprintf(stderr, "Can't... %s\n", gai_strerror(wut));
+		exit(1);
+	}
+
+	printf("Got address info\n");
 
 	struct in_addr localIf;
 	localIf.s_addr = INADDR_ANY;
@@ -35,7 +44,7 @@ static void multicast_send() {
 	printf("Socket option set!\n");
 
 	char* buf = "Hello there";
-	if (sendto(sockfd, buf, strlen(buf), 0, (struct sockaddr*)&groupsock, sizeof(struct sockaddr_in)) < 0) {
+	if (sendto(sockfd, buf, strlen(buf), 0, res->ai_addr, res->ai_addrlen) < 0) {
 		perror("Could not send shit.");
 	}
 
