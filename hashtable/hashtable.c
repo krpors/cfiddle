@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <assert.h>
+
+
+/*
+ * TODO: don't permit NULL keys.
+ */
+
 /*
  * 'Simple' hash function. See http://www.cse.yorku.ca/~oz/hash.html,
  * and http://stackoverflow.com/questions/7666509/hash-function-for-string
@@ -94,6 +101,19 @@ void hashtable_set(struct hashtable* tbl, char* key, char* val) {
 	next->next = e;
 }
 
+const char* hashtable_get(const struct hashtable* ht, const char* key) {
+	unsigned int hash = hash_djb2(key);
+	int bucket = hash % ht->size;
+	printf("Key '%s' could be found in bucket %d\n", key, bucket);
+
+	for (struct entry* entry = ht->table[bucket]; entry != NULL; entry = entry->next) {
+		if (strcmp(key, entry->key) == 0) {
+			return entry->val;
+		}
+	}
+	return NULL;
+}
+
 void hashtable_free(struct hashtable* tbl) {
 	for (unsigned int i = 0; i < tbl->size; i++) {
 		//printf("Freeing bucket %d\n", i);
@@ -135,6 +155,10 @@ int main(/*int argc, char* argv[]*/) {
 	hashtable_set(tbl, "nevik", "allbolrl");
 	hashtable_set(tbl, "nevik", "HARHAR");
 	hashtable_print(tbl);
+
+	const char* val = hashtable_get(tbl, "nivek");
+	printf("Found value '%s' for the key\n", val);
+
 	hashtable_free(tbl);
 
 	return 0;
