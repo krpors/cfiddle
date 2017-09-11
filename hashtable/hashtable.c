@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <assert.h>
 
@@ -104,7 +105,6 @@ void hashtable_set(struct hashtable* tbl, char* key, char* val) {
 const char* hashtable_get(const struct hashtable* ht, const char* key) {
 	unsigned long hash = hash_djb2(key);
 	int bucket = hash % ht->size;
-	printf("Key '%s' could be found in bucket %d\n", key, bucket);
 
 	for (struct entry* entry = ht->table[bucket]; entry != NULL; entry = entry->next) {
 		if (strcmp(key, entry->key) == 0) {
@@ -112,6 +112,52 @@ const char* hashtable_get(const struct hashtable* ht, const char* key) {
 		}
 	}
 	return NULL;
+}
+
+/*
+ * Remove a key from the hashtable.
+ */
+bool hashtable_remove(const struct hashtable* ht, const char* key) {
+	unsigned long hash = hash_djb2(key);
+	int bucket = hash % ht->size;
+	struct entry* first = ht->table[bucket];
+	struct entry* prev  = NULL;
+	struct entry* next  = first;
+
+	// Nothing to see here. Bail out!
+	if (first == NULL) {
+		return false;
+	}
+
+	// There's at least one element in the linked list.
+	for(; next != NULL; next = next->next) {
+		// Did the key match? Then remove that one, update the list correctly.
+		if (strcmp(key, next->key) == 0) {
+			// Are we the first in the list?
+			if (prev == NULL) {
+				ht->table[bucket] = next->next;
+
+				free(next->key);
+				free(next->val);
+				free(next);
+
+				return true;
+			}
+
+			// We're somewhere in the middle, or at the end of the list.
+			prev->next = next->next;
+			free(next->key);
+			free(next->val);
+			free(next);
+
+			return true;
+		}
+
+		prev = next;
+	}
+
+	// At this point nothing can be found to remove.
+	return false;
 }
 
 /*
@@ -149,21 +195,26 @@ void hashtable_print(struct hashtable* tbl) {
 
 
 int main(/*int argc, char* argv[]*/) {
-	struct hashtable* tbl = hashtable_create(900);
+	struct hashtable* tbl = hashtable_create(1024);
 	hashtable_set(tbl, "kevin", "hai");
 	hashtable_set(tbl, "kevin", "cruft");
 	hashtable_set(tbl, "kevin", "bawls");
-	hashtable_set(tbl, "nivek", "herpdederp");
-	hashtable_set(tbl, "props", "heist");
-	hashtable_set(tbl, "propz", "lolz0r");
-	hashtable_set(tbl, "nivek", "NEWLOLOZ");
-	hashtable_set(tbl, "nevik", "allbolrl");
-	hashtable_set(tbl, "nevik", "HARHAR");
+	hashtable_set(tbl, "flarg", "herpdederp");
+	hashtable_set(tbl, "frood", "heist");
+	hashtable_set(tbl, "bangz", "lolz0r");
+	hashtable_set(tbl, "foobs", "NEWLOLOZ");
+	hashtable_set(tbl, "struz", "allbolrl");
+	hashtable_set(tbl, "quuux", "HARHAR");
+
 	printf("\nPrinting buckets:\n");
 	hashtable_print(tbl);
 
-	const char* val = hashtable_get(tbl, "nivek");
-	printf("Found value '%s' for the key\n", val);
+	hashtable_remove(tbl, "kevin");
+	hashtable_remove(tbl, "quuux");
+	printf("\nPrinting buckets:\n");
+	hashtable_print(tbl);
+
+	printf("Found value '%s' for the key\n", hashtable_get(tbl, "kevin"));
 
 	hashtable_free(tbl);
 
