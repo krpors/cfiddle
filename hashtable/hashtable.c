@@ -53,9 +53,10 @@ struct hashtable* hashtable_create(unsigned int size) {
 }
 
 /*
- * Sets a key and a value in the given hashtable 'tbl'.
+ * Sets a key and a value in the given hashtable 'tbl'. The given key must be not
+ * be null. The key and value are duplicated on the heap.
  */
-void hashtable_set(struct hashtable* tbl, char* key, char* val) {
+void hashtable_set(struct hashtable* tbl, const char* key, const char* val) {
 	// calculate hash, then mod it with the table's size to determine the bucket.
 	unsigned long hash = hash_djb2(key);
 	int bucket = hash % tbl->size; // will result in a bucket between [0, tbl->size).
@@ -102,6 +103,9 @@ void hashtable_set(struct hashtable* tbl, char* key, char* val) {
 	last->next = e;
 }
 
+/*
+ * Fetches a key from the hashtable. A pointer to the value is returned.
+ */
 const char* hashtable_get(const struct hashtable* ht, const char* key) {
 	unsigned long hash = hash_djb2(key);
 	int bucket = hash % ht->size;
@@ -140,15 +144,13 @@ bool hashtable_remove(const struct hashtable* ht, const char* key) {
 				free(next->key);
 				free(next->val);
 				free(next);
-
-				return true;
+			} else {
+				// We're somewhere in the middle, or at the end of the list.
+				prev->next = next->next;
+				free(next->key);
+				free(next->val);
+				free(next);
 			}
-
-			// We're somewhere in the middle, or at the end of the list.
-			prev->next = next->next;
-			free(next->key);
-			free(next->val);
-			free(next);
 
 			return true;
 		}
@@ -181,6 +183,9 @@ void hashtable_free(struct hashtable* tbl) {
 	free(tbl);
 }
 
+/*
+ * Prints out the hashtable just for debugging.
+ */
 void hashtable_print(struct hashtable* tbl) {
 	for (unsigned int i = 0; i < tbl->size; i++) {
 		struct entry* next = tbl->table[i];
