@@ -23,47 +23,43 @@ static unsigned long hash_djb2(const char* str) {
 	return hash;
 }
 
+/*
+ * This struct is the actual bucket entry. It's designed as a linked list.
+ */
 struct entry {
 	char* key;
 	char* val;
 	struct entry* next;
 };
 
+/*
+ * The hashtable.
+ */
 struct hashtable {
-	unsigned int size;
-	struct entry** table;
+	unsigned int size;    // Size of the hashtable (amount of buckets).
+	struct entry** table; // Array of entry structs. This is the actual table.
 };
 
+/*
+ * Creates a hashtable and returns it. Size is the initial amount of 'buckets' for
+ * the hashtable.
+ */
 struct hashtable* hashtable_create(unsigned int size) {
 	struct hashtable* tbl = malloc(sizeof(struct hashtable));
 	tbl->size = size;
-	tbl->table = malloc(sizeof(struct entry) * size);
-	memset(tbl->table, 0, sizeof(struct entry) * size);
+	tbl->table = calloc(size, sizeof(struct entry));
 	return tbl;
 }
 
-void hashtable_print(struct hashtable* tbl) {
-	printf("================================================================================\n");
-	for (unsigned int i = 0; i < tbl->size; i++) {
-		printf("Bucket %d\n", i);
-		struct entry* next = tbl->table[i];
-		while (next != NULL) {
-			printf("\t[%s = %s]\n", next->key, next->val);
-			next = next->next;
-		}
-	}
-	printf("================================================================================\n");
-}
-
+/*
+ * Sets a key and a value in the given hashtable 'tbl'.
+ */
 void hashtable_set(struct hashtable* tbl, char* key, char* val) {
-	// calculate hash
-	// check if bucket is empty
+	// calculate hash, then mod it with the table's size to determine the bucket.
 	unsigned long hash = hash_djb2(key);
-	int bucket = hash % tbl->size;
+	int bucket = hash % tbl->size; // will result in a bucket between [0, tbl->size).
 
-	struct entry* next = NULL;
-
-	next = tbl->table[bucket];
+	struct entry* next = tbl->table[bucket];
 
 	// Bucket is empty, so we can create a brand new one.
 	if (next == NULL) {
@@ -76,33 +72,37 @@ void hashtable_set(struct hashtable* tbl, char* key, char* val) {
 		return;
 	}
 
+	// This points to the last (non null) entry in the bucket.
+	struct entry* last = NULL;
+
 	// Bucket is not empty, traverse the linked list, see if the same key is there.
-	while (next != NULL) {
+	for(; next != NULL; next = next->next) {
+		last = next;
+
+		// Check if the requested key equals the key in the current entry.
+		// If so, the value will be replaced.
 		if (strcmp(key, next->key) == 0) {
 			printf("Bucket %d [%s = %s] will be replaced with [%s = %s]\n", bucket, next->key, next->val, key, val);
 			free(next->val);
 			next->val = strdup(val);
 			return;
 		}
-
-		// advance to the next link in the list, if any.
-		if (next->next == NULL) {
-			// end of the list, break out.
-			break;
-		}
-		next = next->next;
 	}
 
+	// When we reach this point, no existing key is found. It's still a hash collision,
+	// so we add a new entry to the back of the list.
 	printf("Bucket %d contained hash collision, so appending new node to end\n", bucket);
 	struct entry* e = malloc(sizeof(struct entry));
 	e->key = strdup(key);
 	e->val = strdup(val);
 	e->next = NULL;
-	next->next = e;
+
+	// Update the last element to point to the newly created entry.
+	last->next = e;
 }
 
 const char* hashtable_get(const struct hashtable* ht, const char* key) {
-	unsigned int hash = hash_djb2(key);
+	unsigned long hash = hash_djb2(key);
 	int bucket = hash % ht->size;
 	printf("Key '%s' could be found in bucket %d\n", key, bucket);
 
@@ -114,6 +114,9 @@ const char* hashtable_get(const struct hashtable* ht, const char* key) {
 	return NULL;
 }
 
+/*
+ * Frees all memory held by the hashtable and its buckets.
+ */
 void hashtable_free(struct hashtable* tbl) {
 	for (unsigned int i = 0; i < tbl->size; i++) {
 		//printf("Freeing bucket %d\n", i);
@@ -132,19 +135,21 @@ void hashtable_free(struct hashtable* tbl) {
 	free(tbl);
 }
 
+void hashtable_print(struct hashtable* tbl) {
+	for (unsigned int i = 0; i < tbl->size; i++) {
+		struct entry* next = tbl->table[i];
+		if (next != NULL) {
+			printf("Bucket %d\n", i);
+			for (; next != NULL; next = next->next) {
+				printf("\t[%s = %s]\n", next->key, next->val);
+			}
+		}
+	}
+}
+
+
 int main(/*int argc, char* argv[]*/) {
-	char* bla1 = "test string 1";
-	char* bla2 = "string test 1";
-
-	unsigned long hash1 = hash_djb2(bla1);
-	unsigned long hash2 = hash_djb2(bla2);
-
-	int buckets = 400;
-
-	printf("%s hashed = %lu, index = %lu\n", bla1, hash1, (hash1 % buckets));
-	printf("%s hashed = %lu, index = %lu\n", bla2, hash2, (hash2 % buckets));
-
-	struct hashtable* tbl = hashtable_create(16);
+	struct hashtable* tbl = hashtable_create(900);
 	hashtable_set(tbl, "kevin", "hai");
 	hashtable_set(tbl, "kevin", "cruft");
 	hashtable_set(tbl, "kevin", "bawls");
@@ -154,6 +159,7 @@ int main(/*int argc, char* argv[]*/) {
 	hashtable_set(tbl, "nivek", "NEWLOLOZ");
 	hashtable_set(tbl, "nevik", "allbolrl");
 	hashtable_set(tbl, "nevik", "HARHAR");
+	printf("\nPrinting buckets:\n");
 	hashtable_print(tbl);
 
 	const char* val = hashtable_get(tbl, "nivek");
