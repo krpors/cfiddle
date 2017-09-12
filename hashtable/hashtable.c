@@ -5,35 +5,7 @@
 
 #include <assert.h>
 
-/*
- * TODO: don't permit NULL keys.
- */
-
-/*
- * This struct is the actual bucket entry. It's designed as a linked list.
- */
-struct entry {
-	char* key;
-	char* val;
-	struct entry* next;
-};
-
-/*
- * The hashtable.
- */
-struct hashtable {
-	unsigned int size;    // Size of the hashtable (amount of buckets).
-	struct entry** table; // Array of entry structs. This is the actual table.
-	unsigned int entries; // Amount of entries in the table. Used to determine load factor.
-};
-
-// Forward declarations. TODO: put this in a header.
-struct hashtable* hashtable_create(unsigned int size);
-void hashtable_set(struct hashtable** ht, const char* key, const char* val);
-const char* hashtable_get(const struct hashtable* ht, const char* key);
-bool hashtable_remove(struct hashtable* ht, const char* key);
-void hashtable_free(struct hashtable* ht);
-void hashtable_rehash(struct hashtable** ht);
+#include "hashtable.h"
 
 /*
  * 'Simple' hash function. See http://www.cse.yorku.ca/~oz/hash.html,
@@ -49,28 +21,21 @@ static unsigned long hash_djb2(const char* str) {
 	return hash;
 }
 
-/*
- * Creates a hashtable and returns it. Size is the initial amount of 'buckets' for
- * the hashtable.
- */
-struct hashtable* hashtable_create(unsigned int size) {
+
+struct hashtable* hashtable_create(unsigned int cap) {
 	struct hashtable* tbl = malloc(sizeof(struct hashtable));
-	tbl->size = size;
-	tbl->table = calloc(size, sizeof(struct entry));
+	tbl->cap = cap;
+	tbl->table = calloc(cap, sizeof(struct entry));
 	tbl->entries = 0;
 	return tbl;
 }
 
-/*
- * Sets a key and a value in the given hashtable 'ht'. The given key must be not
- * be null. The key and value are duplicated on the heap.
- */
+
 void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
 	// calculate hash, then mod it with the table's size to determine the bucket.
 	unsigned long hash = hash_djb2(key);
-	int bucket = hash % (*ht)->size; // will result in a bucket between [0, (*ht)->size).
+	int bucket = hash % (*ht)->cap; // will result in a bucket between [0, (*ht)->cap).
 
-	printf("Setting key %s = %s into bucket = %d, hashtable pointer %p\n", key, val, (*ht)->size, (void*) ht);
 	struct entry* next = (*ht)->table[bucket];
 
 	// Bucket is empty, so we can create a brand new one.
@@ -120,16 +85,13 @@ void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
 	last->next = e;
 
 	(*ht)->entries++;
-	fprintf(stderr, "pre-rehash: %p\n", (void*)ht);
-	hashtable_rehash(ht);
+	hashtable_resize(ht);
 }
 
-/*
- * Fetches a key from the hashtable. A pointer to the value is returned.
- */
+
 const char* hashtable_get(const struct hashtable* ht, const char* key) {
 	unsigned long hash = hash_djb2(key);
-	int bucket = hash % ht->size;
+	int bucket = hash % ht->cap;
 
 	for (struct entry* entry = ht->table[bucket]; entry != NULL; entry = entry->next) {
 		if (strcmp(key, entry->key) == 0) {
@@ -139,12 +101,10 @@ const char* hashtable_get(const struct hashtable* ht, const char* key) {
 	return NULL;
 }
 
-/*
- * Remove a key from the hashtable.
- */
+
 bool hashtable_remove(struct hashtable* ht, const char* key) {
 	unsigned long hash = hash_djb2(key);
-	int bucket = hash % ht->size;
+	int bucket = hash % ht->cap;
 	struct entry* first = ht->table[bucket];
 	struct entry* prev  = NULL;
 	struct entry* next  = first;
@@ -184,11 +144,9 @@ bool hashtable_remove(struct hashtable* ht, const char* key) {
 	return false;
 }
 
-/*
- * Frees all memory held by the hashtable and its buckets.
- */
+
 void hashtable_free(struct hashtable* ht) {
-	for (unsigned int i = 0; i < ht->size; i++) {
+	for (unsigned int i = 0; i < ht->cap; i++) {
 		struct entry* next = ht->table[i];
 		while (next != NULL) {
 			struct entry* curr = next;
@@ -205,18 +163,9 @@ void hashtable_free(struct hashtable* ht) {
 	free(ht);
 }
 
-/*
- * When the load factor (entries / size) exceeds 0.75, increase the size and 'rehash'
- * the hashtable by adding all entries again. The original given hashtable is freed
- * and the pointer is reset to the newly rehashed table.
- *
- * Note that you have to use a double pointer to change the pointer (since arguments
- * are passed by value in C).
- *
- * I had help with this: https://stackoverflow.com/questions/13431108/changing-address-contained-by-pointer-using-function#13431146
- */
-void hashtable_rehash(struct hashtable** ht) {
-	float loadfactor = (float)(*ht)->entries / (float)(*ht)->size;
+
+void hashtable_resize(struct hashtable** ht) {
+	float loadfactor = (float)(*ht)->entries / (float)(*ht)->cap;
 
 	if (loadfactor < 0.75f) {
 		// return ourselves, nothing to be done.
@@ -229,9 +178,9 @@ void hashtable_rehash(struct hashtable** ht) {
 #endif
 
 	// Create a new hashtable, increase the size by twice
-	struct hashtable* rehashed = hashtable_create((*ht)->size * 2);
+	struct hashtable* rehashed = hashtable_create((*ht)->cap * 2);
 	// iterate over all buckets and keys, re-add them.
-	for (unsigned int i = 0; i < (*ht)->size; i++) {
+	for (unsigned int i = 0; i < (*ht)->cap; i++) {
 		for (struct entry* next = (*ht)->table[i]; next != NULL; next = next->next) {
 			hashtable_set(&rehashed, next->key, next->val);
 		}
@@ -247,7 +196,7 @@ void hashtable_rehash(struct hashtable** ht) {
  * Prints out the hashtable just for debugging.
  */
 void hashtable_print(struct hashtable* ht) {
-	for (unsigned int i = 0; i < ht->size; i++) {
+	for (unsigned int i = 0; i < ht->cap; i++) {
 		struct entry* next = ht->table[i];
 		if (next != NULL) {
 			printf("Bucket %d\n", i);
@@ -279,8 +228,6 @@ int main(/*int argc, char* argv[]*/) {
 
 	printf("\n>>> After removing:\n");
 	hashtable_print(tbl);
-
-	//hashtable_rehash(&tbl);
 
 	printf("\n>>> After rehashing:\n");
 	hashtable_print(tbl);
