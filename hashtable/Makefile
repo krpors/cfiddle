@@ -1,4 +1,4 @@
-CPPFLAGS = -DNDEBUG
+CPPFLAGS =
 CFLAGS = -std=gnu99 -Wall -Wextra -pedantic -O3 -MMD -MP -ggdb
 objects = hashtable.o
 

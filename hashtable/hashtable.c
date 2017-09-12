@@ -5,24 +5,9 @@
 
 #include <assert.h>
 
-
 /*
  * TODO: don't permit NULL keys.
  */
-
-/*
- * 'Simple' hash function. See http://www.cse.yorku.ca/~oz/hash.html,
- * and http://stackoverflow.com/questions/7666509/hash-function-for-string
- */
-static unsigned long hash_djb2(const char* str) {
-	unsigned long hash = 5381;
-	int c;
-	while ((c = *str++)) {
-		hash = ((hash << 5) + hash) + c;
-	}
-
-	return hash;
-}
 
 /*
  * This struct is the actual bucket entry. It's designed as a linked list.
@@ -39,7 +24,30 @@ struct entry {
 struct hashtable {
 	unsigned int size;    // Size of the hashtable (amount of buckets).
 	struct entry** table; // Array of entry structs. This is the actual table.
+	unsigned int entries; // Amount of entries in the table. Used to determine load factor.
 };
+
+// Forward declarations. TODO: put this in a header.
+struct hashtable* hashtable_create(unsigned int size);
+void hashtable_set(struct hashtable* ht, const char* key, const char* val);
+const char* hashtable_get(const struct hashtable* ht, const char* key);
+bool hashtable_remove(struct hashtable* ht, const char* key);
+void hashtable_free(struct hashtable* ht);
+void hashtable_rehash(struct hashtable** ht);
+
+/*
+ * 'Simple' hash function. See http://www.cse.yorku.ca/~oz/hash.html,
+ * and http://stackoverflow.com/questions/7666509/hash-function-for-string
+ */
+static unsigned long hash_djb2(const char* str) {
+	unsigned long hash = 5381;
+	int c;
+	while ((c = *str++)) {
+		hash = ((hash << 5) + hash) + c;
+	}
+
+	return hash;
+}
 
 /*
  * Creates a hashtable and returns it. Size is the initial amount of 'buckets' for
@@ -49,28 +57,35 @@ struct hashtable* hashtable_create(unsigned int size) {
 	struct hashtable* tbl = malloc(sizeof(struct hashtable));
 	tbl->size = size;
 	tbl->table = calloc(size, sizeof(struct entry));
+	tbl->entries = 0;
 	return tbl;
 }
 
 /*
- * Sets a key and a value in the given hashtable 'tbl'. The given key must be not
+ * Sets a key and a value in the given hashtable 'ht'. The given key must be not
  * be null. The key and value are duplicated on the heap.
  */
-void hashtable_set(struct hashtable* tbl, const char* key, const char* val) {
+void hashtable_set(struct hashtable* ht, const char* key, const char* val) {
 	// calculate hash, then mod it with the table's size to determine the bucket.
 	unsigned long hash = hash_djb2(key);
-	int bucket = hash % tbl->size; // will result in a bucket between [0, tbl->size).
+	int bucket = hash % ht->size; // will result in a bucket between [0, ht->size).
 
-	struct entry* next = tbl->table[bucket];
+	printf("key %s = %s: %d\n", key, val, ht->size);
+	struct entry* next = ht->table[bucket];
 
 	// Bucket is empty, so we can create a brand new one.
 	if (next == NULL) {
-		printf("Bucket %d is empty, creating new one\n", bucket);
+#ifndef NDEBUG
+		fprintf(stderr, "Bucket %d is empty, creating new one\n", bucket);
+#endif
 		struct entry* e = malloc(sizeof(struct entry));
 		e->key  = strdup(key);
 		e->val  = strdup(val);
 		e->next = NULL;
-		tbl->table[bucket] = e;
+		ht->table[bucket] = e;
+		ht->entries++;
+		// check for rehashing.
+		hashtable_rehash(&ht);
 		return;
 	}
 
@@ -84,7 +99,9 @@ void hashtable_set(struct hashtable* tbl, const char* key, const char* val) {
 		// Check if the requested key equals the key in the current entry.
 		// If so, the value will be replaced.
 		if (strcmp(key, next->key) == 0) {
-			printf("Bucket %d [%s = %s] will be replaced with [%s = %s]\n", bucket, next->key, next->val, key, val);
+#ifndef NDEBUG
+			fprintf(stderr, "Bucket %d [%s = %s] will be replaced with [%s = %s]\n", bucket, next->key, next->val, key, val);
+#endif
 			free(next->val);
 			next->val = strdup(val);
 			return;
@@ -93,7 +110,9 @@ void hashtable_set(struct hashtable* tbl, const char* key, const char* val) {
 
 	// When we reach this point, no existing key is found. It's still a hash collision,
 	// so we add a new entry to the back of the list.
-	printf("Bucket %d contained hash collision, so appending new node to end\n", bucket);
+#ifndef NDEBUG
+	fprintf(stderr,"Bucket %d contained hash collision, so appending new node to end\n", bucket);
+#endif
 	struct entry* e = malloc(sizeof(struct entry));
 	e->key = strdup(key);
 	e->val = strdup(val);
@@ -101,6 +120,9 @@ void hashtable_set(struct hashtable* tbl, const char* key, const char* val) {
 
 	// Update the last element to point to the newly created entry.
 	last->next = e;
+
+	ht->entries++;
+	hashtable_rehash(&ht);
 }
 
 /*
@@ -121,7 +143,7 @@ const char* hashtable_get(const struct hashtable* ht, const char* key) {
 /*
  * Remove a key from the hashtable.
  */
-bool hashtable_remove(const struct hashtable* ht, const char* key) {
+bool hashtable_remove(struct hashtable* ht, const char* key) {
 	unsigned long hash = hash_djb2(key);
 	int bucket = hash % ht->size;
 	struct entry* first = ht->table[bucket];
@@ -152,6 +174,7 @@ bool hashtable_remove(const struct hashtable* ht, const char* key) {
 				free(next);
 			}
 
+			ht->entries--;
 			return true;
 		}
 
@@ -165,13 +188,13 @@ bool hashtable_remove(const struct hashtable* ht, const char* key) {
 /*
  * Frees all memory held by the hashtable and its buckets.
  */
-void hashtable_free(struct hashtable* tbl) {
-	for (unsigned int i = 0; i < tbl->size; i++) {
-		//printf("Freeing bucket %d\n", i);
-		struct entry* next = tbl->table[i];
+void hashtable_free(struct hashtable* ht) {
+	for (unsigned int i = 0; i < ht->size; i++) {
+		struct entry* next = ht->table[i];
 		while (next != NULL) {
 			struct entry* curr = next;
 			next = next->next;
+			printf("Freeing key '%s' with value '%s'\n", curr->key, curr->val);
 
 			free(curr->key);
 			free(curr->val);
@@ -179,16 +202,53 @@ void hashtable_free(struct hashtable* tbl) {
 		}
 	}
 
-	free(tbl->table);
-	free(tbl);
+	free(ht->table);
+	free(ht);
+}
+
+/*
+ * When the load factor (entries / size) exceeds 0.75, increase the size and 'rehash'
+ * the hashtable by adding all entries again. The original given hashtable is freed
+ * and the pointer is reset to the newly rehashed table.
+ *
+ * Note that you have to use a double pointer to change the pointer (since arguments
+ * are passed by value in C).
+ *
+ * I had help with this: https://stackoverflow.com/questions/13431108/changing-address-contained-by-pointer-using-function#13431146
+ */
+void hashtable_rehash(struct hashtable** ht) {
+	float loadfactor = (float)(*ht)->entries / (float)(*ht)->size;
+
+	if (loadfactor < 0.75f) {
+		// return ourselves, nothing to be done.
+		return;
+	}
+
+#ifndef NDEBUG
+	fprintf(stderr, "Load factor is %f\n", loadfactor);
+#endif
+
+	// Create a new hashtable, increase the size by twice
+	struct hashtable* rehashed = hashtable_create((*ht)->size * 2);
+	// iterate over all buckets and keys, re-add them.
+	for (unsigned int i = 0; i < (*ht)->size; i++) {
+		for (struct entry* next = (*ht)->table[i]; next != NULL; next = next->next) {
+			hashtable_set(rehashed, next->key, next->val);
+		}
+	}
+	
+	// free the old hashtable
+	hashtable_free(*ht);
+
+	*ht = rehashed;
 }
 
 /*
  * Prints out the hashtable just for debugging.
  */
-void hashtable_print(struct hashtable* tbl) {
-	for (unsigned int i = 0; i < tbl->size; i++) {
-		struct entry* next = tbl->table[i];
+void hashtable_print(struct hashtable* ht) {
+	for (unsigned int i = 0; i < ht->size; i++) {
+		struct entry* next = ht->table[i];
 		if (next != NULL) {
 			printf("Bucket %d\n", i);
 			for (; next != NULL; next = next->next) {
@@ -200,7 +260,7 @@ void hashtable_print(struct hashtable* tbl) {
 
 
 int main(/*int argc, char* argv[]*/) {
-	struct hashtable* tbl = hashtable_create(1024);
+	struct hashtable* tbl = hashtable_create(6);
 	hashtable_set(tbl, "kevin", "hai");
 	hashtable_set(tbl, "kevin", "cruft");
 	hashtable_set(tbl, "kevin", "bawls");
@@ -211,15 +271,19 @@ int main(/*int argc, char* argv[]*/) {
 	hashtable_set(tbl, "struz", "allbolrl");
 	hashtable_set(tbl, "quuux", "HARHAR");
 
-	printf("\nPrinting buckets:\n");
+	printf(">>> Initial table:\n");
 	hashtable_print(tbl);
 
 	hashtable_remove(tbl, "kevin");
 	hashtable_remove(tbl, "quuux");
-	printf("\nPrinting buckets:\n");
+
+	printf("\n>>> After removing:\n");
 	hashtable_print(tbl);
 
-	printf("Found value '%s' for the key\n", hashtable_get(tbl, "kevin"));
+	hashtable_rehash(&tbl);
+
+	printf("\n>>> After rehashing:\n");
+	hashtable_print(tbl);
 
 	hashtable_free(tbl);
 
