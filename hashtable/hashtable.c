@@ -29,7 +29,7 @@ struct hashtable {
 
 // Forward declarations. TODO: put this in a header.
 struct hashtable* hashtable_create(unsigned int size);
-void hashtable_set(struct hashtable* ht, const char* key, const char* val);
+void hashtable_set(struct hashtable** ht, const char* key, const char* val);
 const char* hashtable_get(const struct hashtable* ht, const char* key);
 bool hashtable_remove(struct hashtable* ht, const char* key);
 void hashtable_free(struct hashtable* ht);
@@ -65,13 +65,13 @@ struct hashtable* hashtable_create(unsigned int size) {
  * Sets a key and a value in the given hashtable 'ht'. The given key must be not
  * be null. The key and value are duplicated on the heap.
  */
-void hashtable_set(struct hashtable* ht, const char* key, const char* val) {
+void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
 	// calculate hash, then mod it with the table's size to determine the bucket.
 	unsigned long hash = hash_djb2(key);
-	int bucket = hash % ht->size; // will result in a bucket between [0, ht->size).
+	int bucket = hash % (*ht)->size; // will result in a bucket between [0, (*ht)->size).
 
-	printf("key %s = %s: %d\n", key, val, ht->size);
-	struct entry* next = ht->table[bucket];
+	printf("Setting key %s = %s into bucket = %d, hashtable pointer %p\n", key, val, (*ht)->size, (void*) ht);
+	struct entry* next = (*ht)->table[bucket];
 
 	// Bucket is empty, so we can create a brand new one.
 	if (next == NULL) {
@@ -82,10 +82,8 @@ void hashtable_set(struct hashtable* ht, const char* key, const char* val) {
 		e->key  = strdup(key);
 		e->val  = strdup(val);
 		e->next = NULL;
-		ht->table[bucket] = e;
-		ht->entries++;
-		// check for rehashing.
-		hashtable_rehash(&ht);
+		(*ht)->table[bucket] = e;
+		(*ht)->entries++;
 		return;
 	}
 
@@ -121,8 +119,9 @@ void hashtable_set(struct hashtable* ht, const char* key, const char* val) {
 	// Update the last element to point to the newly created entry.
 	last->next = e;
 
-	ht->entries++;
-	hashtable_rehash(&ht);
+	(*ht)->entries++;
+	fprintf(stderr, "pre-rehash: %p\n", (void*)ht);
+	hashtable_rehash(ht);
 }
 
 /*
@@ -225,7 +224,8 @@ void hashtable_rehash(struct hashtable** ht) {
 	}
 
 #ifndef NDEBUG
-	fprintf(stderr, "Load factor is %f\n", loadfactor);
+	fprintf(stderr, "Rehashing: Load factor is %f\n", loadfactor);
+	fprintf(stderr, "About to rehash pointer %p\n", (void*)*ht);
 #endif
 
 	// Create a new hashtable, increase the size by twice
@@ -233,7 +233,7 @@ void hashtable_rehash(struct hashtable** ht) {
 	// iterate over all buckets and keys, re-add them.
 	for (unsigned int i = 0; i < (*ht)->size; i++) {
 		for (struct entry* next = (*ht)->table[i]; next != NULL; next = next->next) {
-			hashtable_set(rehashed, next->key, next->val);
+			hashtable_set(&rehashed, next->key, next->val);
 		}
 	}
 	
@@ -261,15 +261,15 @@ void hashtable_print(struct hashtable* ht) {
 
 int main(/*int argc, char* argv[]*/) {
 	struct hashtable* tbl = hashtable_create(6);
-	hashtable_set(tbl, "kevin", "hai");
-	hashtable_set(tbl, "kevin", "cruft");
-	hashtable_set(tbl, "kevin", "bawls");
-	hashtable_set(tbl, "flarg", "herpdederp");
-	hashtable_set(tbl, "frood", "heist");
-	hashtable_set(tbl, "bangz", "lolz0r");
-	hashtable_set(tbl, "foobs", "NEWLOLOZ");
-	hashtable_set(tbl, "struz", "allbolrl");
-	hashtable_set(tbl, "quuux", "HARHAR");
+	hashtable_set(&tbl, "kevin", "hai");
+	hashtable_set(&tbl, "kevin", "cruft");
+	hashtable_set(&tbl, "kevin", "bawls");
+	hashtable_set(&tbl, "flarg", "herpdederp");
+	hashtable_set(&tbl, "frood", "heist");
+	hashtable_set(&tbl, "bangz", "lolz0r");
+	hashtable_set(&tbl, "foobs", "NEWLOLOZ");
+	hashtable_set(&tbl, "struz", "allbolrl");
+	hashtable_set(&tbl, "quuux", "HARHAR");
 
 	printf(">>> Initial table:\n");
 	hashtable_print(tbl);
@@ -280,7 +280,7 @@ int main(/*int argc, char* argv[]*/) {
 	printf("\n>>> After removing:\n");
 	hashtable_print(tbl);
 
-	hashtable_rehash(&tbl);
+	//hashtable_rehash(&tbl);
 
 	printf("\n>>> After rehashing:\n");
 	hashtable_print(tbl);
