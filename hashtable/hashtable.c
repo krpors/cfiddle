@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <time.h> // for srand()
 
 #include <assert.h>
 
@@ -151,8 +152,9 @@ void hashtable_free(struct hashtable* ht) {
 		while (next != NULL) {
 			struct entry* curr = next;
 			next = next->next;
+#ifndef NDEBUG
 			printf("Freeing key '%s' with value '%s'\n", curr->key, curr->val);
-
+#endif
 			free(curr->key);
 			free(curr->val);
 			free(curr);
@@ -207,32 +209,51 @@ void hashtable_print(struct hashtable* ht) {
 	}
 }
 
-
-int main(/*int argc, char* argv[]*/) {
-	struct hashtable* tbl = hashtable_create(6);
-	hashtable_set(&tbl, "kevin", "hai");
-	hashtable_set(&tbl, "kevin", "cruft");
-	hashtable_set(&tbl, "kevin", "bawls");
-	hashtable_set(&tbl, "flarg", "herpdederp");
-	hashtable_set(&tbl, "frood", "heist");
-	hashtable_set(&tbl, "bangz", "lolz0r");
-	hashtable_set(&tbl, "foobs", "NEWLOLOZ");
-	hashtable_set(&tbl, "struz", "allbolrl");
-	hashtable_set(&tbl, "quuux", "HARHAR");
-
-	printf(">>> Initial table:\n");
-	hashtable_print(tbl);
-
-	hashtable_remove(tbl, "kevin");
-	hashtable_remove(tbl, "quuux");
-
-	printf("\n>>> After removing:\n");
-	hashtable_print(tbl);
-
-	printf("\n>>> After rehashing:\n");
+void test1() {
+	srand(time(NULL));
+	struct hashtable* tbl = hashtable_create(2);
+	int max = 10000;
+	for (int i = 0; i < max; i++) {
+		char key[16];
+		char val[16];
+		snprintf(key, 16, "key_%d_%d", i, rand());
+		snprintf(val, 16, "val_%d_%d", i, rand());
+		hashtable_set(&tbl, key, val);
+	}
+	printf("Inserted %d items. Bucket size is %d\n", max, tbl->cap);
 	hashtable_print(tbl);
 
 	hashtable_free(tbl);
+}
 
+void test2() {
+	srand(time(NULL));
+	struct hashtable* tbl = hashtable_create(16);
+
+	int i = 0;
+	int c = 0;
+	printf("Hashtable example. Type 'q' to quit. Press enter to keep adding items.\n");
+	while ((c = getchar()) != 'q') {
+		char key[16];
+		char val[16];
+		snprintf(key, 16, "key_%d_%d", i, rand());
+		snprintf(val, 16, "val_%d_%d", i, rand());
+		hashtable_set(&tbl, key, val);
+		i++;
+
+		hashtable_print(tbl);
+		printf("================================================================================\n");
+		printf("Capacity:      %d\n", tbl->cap);
+		printf("Keys inserted: %d\n", i);
+		printf("Load factor:   %f\n", (float)i / (float)tbl->cap);
+		printf("================================================================================\n");
+	}
+
+	hashtable_free(tbl);
+}
+
+
+int main(/*int argc, char* argv[]*/) {
+	test2();
 	return 0;
 }
