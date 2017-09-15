@@ -23,9 +23,10 @@ static unsigned long hash_djb2(const char* str) {
 }
 
 
-struct hashtable* hashtable_create(unsigned int cap) {
+struct hashtable* hashtable_create(unsigned int cap, float lf) {
 	struct hashtable* tbl = malloc(sizeof(struct hashtable));
 	tbl->cap = cap;
+	tbl->load_factor = lf;
 	tbl->table = calloc(cap, sizeof(struct entry));
 	tbl->entries = 0;
 	return tbl;
@@ -169,7 +170,7 @@ void hashtable_free(struct hashtable* ht) {
 void hashtable_resize(struct hashtable** ht) {
 	float loadfactor = (float)(*ht)->entries / (float)(*ht)->cap;
 
-	if (loadfactor < 0.75f) {
+	if (loadfactor < (*ht)->load_factor) {
 		// return ourselves, nothing to be done.
 		return;
 	}
@@ -180,7 +181,7 @@ void hashtable_resize(struct hashtable** ht) {
 #endif
 
 	// Create a new hashtable, increase the size by twice
-	struct hashtable* rehashed = hashtable_create((*ht)->cap * 2);
+	struct hashtable* rehashed = hashtable_create((*ht)->cap * 2, (*ht)->load_factor);
 	// iterate over all buckets and keys, re-add them.
 	for (unsigned int i = 0; i < (*ht)->cap; i++) {
 		for (struct entry* next = (*ht)->table[i]; next != NULL; next = next->next) {
@@ -210,7 +211,7 @@ void thecallback(const char* key, const char* val) {
 
 void test1() {
 	srand(time(NULL));
-	struct hashtable* tbl = hashtable_create(2);
+	struct hashtable* tbl = hashtable_create(2, 0.75);
 	int max = 200000;
 	for (int i = 0; i < max; i++) {
 		char key[16];
@@ -228,7 +229,7 @@ void test1() {
 
 void test2() {
 	srand(time(NULL));
-	struct hashtable* tbl = hashtable_create(16);
+	struct hashtable* tbl = hashtable_create(16, 0.75);
 
 	int i = 0;
 	int c = 0;
@@ -254,6 +255,6 @@ void test2() {
 }
 
 int main(/*int argc, char* argv[]*/) {
-	test1();
+	test2();
 	return 0;
 }

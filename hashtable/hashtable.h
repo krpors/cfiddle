@@ -17,14 +17,19 @@ struct entry {
  */
 struct hashtable {
 	unsigned int cap;     // Capacity of the hashtable (amount of buckets).
+	float load_factor;    // Load factor. Resize will be done when entries / cap is 
+	                      // higher than this number.
 	struct entry** table; // Array of entry structs. This is the actual table.
 	unsigned int entries; // Amount of entries in the table. Used to determine load factor.
 };
 
 /**
- * Creates a new hashtable on the heap with the specified capacity (buckets).
+ * Creates a new hashtable on the heap with the specified capacity (buckets), and
+ * the specified load factor. The hashtable will be resized when the internal load
+ * factor (entries / capacity) exceeds this load factor. A logical default choice is
+ * a value of 0.75.
  */
-struct hashtable* hashtable_create(unsigned int cap);
+struct hashtable* hashtable_create(unsigned int cap, float loadfactor);
 
 /**
  * Sets a new key and value in the hashtable. When the load factor exceeds
