@@ -194,25 +194,24 @@ void hashtable_resize(struct hashtable** ht) {
 	*ht = rehashed;
 }
 
-/*
- * Prints out the hashtable just for debugging.
- */
-void hashtable_print(struct hashtable* ht) {
+void hashtable_for_each(const struct hashtable* ht, void (*callback)(const char* k, const char* v)) {
+	// iterate over all buckets
 	for (unsigned int i = 0; i < ht->cap; i++) {
-		struct entry* next = ht->table[i];
-		if (next != NULL) {
-			printf("Bucket %d\n", i);
-			for (; next != NULL; next = next->next) {
-				printf("\t[%s = %s]\n", next->key, next->val);
-			}
+		// iterate over every entry in the bucket
+		for (struct entry* next = ht->table[i]; next != NULL; next = next->next) {
+			callback(next->key, next->val);
 		}
 	}
+}
+
+void thecallback(const char* key, const char* val) {
+	printf("%s = %s\n", key, val);
 }
 
 void test1() {
 	srand(time(NULL));
 	struct hashtable* tbl = hashtable_create(2);
-	int max = 10000;
+	int max = 200000;
 	for (int i = 0; i < max; i++) {
 		char key[16];
 		char val[16];
@@ -221,7 +220,8 @@ void test1() {
 		hashtable_set(&tbl, key, val);
 	}
 	printf("Inserted %d items. Bucket size is %d\n", max, tbl->cap);
-	hashtable_print(tbl);
+
+	hashtable_for_each(tbl, &thecallback);
 
 	hashtable_free(tbl);
 }
@@ -241,7 +241,8 @@ void test2() {
 		hashtable_set(&tbl, key, val);
 		i++;
 
-		hashtable_print(tbl);
+
+		hashtable_for_each(tbl, &thecallback);
 		printf("================================================================================\n");
 		printf("Capacity:      %d\n", tbl->cap);
 		printf("Keys inserted: %d\n", i);
@@ -252,8 +253,7 @@ void test2() {
 	hashtable_free(tbl);
 }
 
-
 int main(/*int argc, char* argv[]*/) {
-	test2();
+	test1();
 	return 0;
 }

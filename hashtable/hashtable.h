@@ -1,3 +1,6 @@
+#ifndef HASHTABLE_H
+#define HASHTABLE_H
+
 /*
  * This struct is the actual bucket entry. It's designed as a linked list.
  * When hash collisions occur (the key is put in the same bucket), an entry
@@ -64,7 +67,9 @@ void hashtable_free(struct hashtable* ht);
 void hashtable_resize(struct hashtable** ht);
 
 /**
- * Prints out the buckets and their contents to stdout.
+ * Iterates through every bucket and link in the list, and executed the callback
+ * function `callback' with the found key and value.
  */
-void hashtable_print(struct hashtable* ht);
+void hashtable_for_each(const struct hashtable* ht, void (*callback)(const char* k, const char* v));
 
+#endif // HASHTABLE_H
