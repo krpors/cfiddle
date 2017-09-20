@@ -200,7 +200,7 @@ void hashtable_for_each(const struct hashtable* ht, void (*callback)(const char*
 	for (unsigned int i = 0; i < ht->cap; i++) {
 		// iterate over every entry in the bucket
 		for (struct entry* next = ht->table[i]; next != NULL; next = next->next) {
-			callback(next->key, next->val);
+			(*callback)(next->key, next->val);
 		}
 	}
 }
