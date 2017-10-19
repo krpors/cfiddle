@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include <linux/input.h>
 
@@ -25,8 +26,16 @@ int main() {
 		if (evt.code == KEY_RIGHTCTRL) {
 			right_ctrl_press = evt.type;
 		}
-		if (evt.code == KEY_A && evt.value == 1 && right_ctrl_press) {
-			printf("Ctrl A!\n");
+
+		bool pressed = (evt.value == 1 || evt.value == 2);
+		//  keypress _______________/                 /
+		//  key repeat ______________________________/
+
+		if (evt.code == KEY_A && pressed && right_ctrl_press) {
+			struct tm* nowtm = localtime(&evt.time.tv_sec);
+			char buf[64] = {0};
+			strftime(buf, sizeof(buf), "%Y-%m-%d @ %H:%M:%S", nowtm);
+			printf("%s Ctrl A!\n", buf);
 		}
 	}
 
