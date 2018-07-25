@@ -77,6 +77,9 @@ void burn(SDL_Surface* target, short* array) {
 }
 
 int _main(int argc, char* argv[]) {
+	(void)(argc);
+	(void)(argv);
+
 	srand(time(NULL));
 
 	short* ss = malloc(width * height * sizeof(short));
@@ -87,6 +90,7 @@ int _main(int argc, char* argv[]) {
 	update(ss);
 
 	free(ss);
+	return 0;
 }
 
 int main(int argc, char* argv[]) {
