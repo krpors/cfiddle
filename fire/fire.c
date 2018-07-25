@@ -9,6 +9,63 @@ inline int color() {
 	return rand() % 255;
 }
 
+const int width = 10;
+const int height = 10;
+
+inline short getval(short* array, int x, int y) {
+	return array[y * width + x];
+}
+
+inline void setval(short* array, int x, int y, short val) {
+	array[y * width + x] = val;
+}
+
+void printarr(short* array) {
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			printf("%4d,", getval(array, x, y));
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
+void burn(SDL_Surface* target, short* array) {
+	// initialize the bottom row with cruft.
+	for (int x = 0; x < width; x++) {
+		setval(array, x, height - 1, color());
+	}
+
+	printarr(array);
+
+	int tilewidth  = target->w / width;
+	int tileheight = target->h / width;
+
+	// calculate the rest
+	for (int y = height - 1; y > 1; y--) {
+		for (int x = 0; x < width; x++) {
+			short bl = getval(array, y - 1, x - 1);
+			short br = getval(array, y - 1, x + 1);
+			short ib = getval(array, y - 1, x    );
+			short bb = getval(array, y - 2, x    );
+			setval(array, x, y, (bl + br + ib + bb) / 4.04);
+		}
+	}
+
+	printarr(array);
+	exit(1);
+	// draw it!
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			int idx = y * width + x;
+			SDL_Rect rect = {x * tilewidth, y * tileheight, tilewidth, tileheight};
+			SDL_FillRect(target, &rect, SDL_MapRGB(target->format, array[idx], 0, 0));
+		}
+	}
+
+}
+
+
 int main(int argc, char* argv[]) {
 	srand(time(NULL));
 
@@ -32,9 +89,7 @@ int main(int argc, char* argv[]) {
 	const int w = 64;
 	const int h = 64;
 	short* ss = malloc(w * h * sizeof(short));
-	for (int i = 0; i < (w*h); i++) {
-		ss[i] = color();
-	}
+	memset(ss, 0, w * h * sizeof(short));
 
 	//SDL_Surface* surfPaint = SDL_CreateRGBSurface(0, 200, 200, 32, 0,0,0,0);
 	SDL_Surface* surface = SDL_GetWindowSurface(window);
@@ -52,8 +107,8 @@ int main(int argc, char* argv[]) {
 			case SDLK_ESCAPE: quit = true;    break;
 			case SDLK_SPACE:
 				if (e.key.type == SDL_KEYDOWN) {
-				pause = !pause;
-				printf("pausing: %d\n", pause);
+					pause = !pause;
+					printf("pausing: %d\n", pause);
 				}
 				break;
 			}
@@ -63,18 +118,9 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		//SDL_FillRect(surfPaint, NULL, SDL_MapRGB(surfPaint->format, 255, 0, 0));
-		//SDL_BlitSurface(surfPaint, NULL, surface, NULL);
-		for (int i = 0; i < (w*h); i++) {
-			ss[i] = color();
-		}
-		for (int x = 0; x < w; x++) {
-			for (int y = 0; y < h; y++) {
-				int idx = y * w + x;
-				SDL_Rect rect = {x*5,y*5,5,5};
-				SDL_FillRect(surface, &rect, SDL_MapRGB(surface->format, ss[idx], 0, 0));
-			}
-		}
+		burn(surface, ss);
+
+		SDL_Delay(100);
 		SDL_UpdateWindowSurface(window);
 	}
 
