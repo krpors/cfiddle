@@ -21,14 +21,17 @@ struct matrix {
 };
 
 void matrix_init(struct matrix* m, int width, int height) {
+	m->width = width;
+	m->height = height;
 	m->array = malloc(width * height * sizeof(uint32_t));
+	memset(m->array, 0, width*height* sizeof(uint32_t));
 }
 
 void matrix_free(struct matrix* m) {
 	free(m->array);
 }
 
-inline uint32_t matrix_get(struct matrix* m, int x, int y) {
+inline uint32_t matrix_get(const struct matrix* m, int x, int y) {
 	return m->array[y * m->width + x % m->width];
 }
 
@@ -36,106 +39,93 @@ inline void matrix_set(struct matrix* m, int x, int y, uint32_t val) {
 	m->array[y * m->width + x] = val;
 }
 
+inline void matrix_setrgb(struct matrix* m, int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+	matrix_set(m, x, y, (r << 16) | (g << 8) | (b));
+}
+
+inline void matrix_getrgb(const struct matrix* m, int x, int y, uint8_t* r, uint8_t* g, uint8_t* b) {
+	uint32_t val = matrix_get(m, x, y);
+	if (r != NULL) {
+		*r = (uint8_t)((val & 0xFF0000) >> 16);
+	}
+	if (g != NULL) {
+		*g = (uint8_t)((val & 0x00FF00) >>  8);
+	}
+	if (b != NULL) {
+		*b = (uint8_t)((val & 0x0000FF));
+	}
+}
+
 void matrix_update(struct matrix* m) {
 	// initialize the bottom row with cruft.
 	for (int x = 0; x < m->width; x++) {
-		matrix_set(m, x, m->height - 2, color());
+		matrix_setrgb(m, x, m->height - 2, color(), 0x00, 0x00);
+		uint8_t r, g, b;
+		matrix_getrgb(m, x, m->height - 2, &r, &g, &b);
 	}
 
 	// calculate the rest
 	for (int y = 0; y < m->height - 2; y++) {
 		for (int x = 0; x < m->width; x++) {
-			short bl = matrix_get(m, x - 1, y + 1);
-			short br = matrix_get(m, x + 1, y + 1);
-			short ib = matrix_get(m, x    , y + 1);
-			short bb = matrix_get(m, x    , y + 2);
-			short newval = (bl + br + ib + bb) / 4.04;
-			matrix_set(m, x, y, newval);
+			uint8_t rbl, rbr, rib, rbb;
+			matrix_getrgb(m, x - 1, y + 1, &rbl, NULL, NULL);
+			matrix_getrgb(m, x + 1, y + 1, &rbr, NULL, NULL);
+			matrix_getrgb(m, x    , y + 1, &rib, NULL, NULL);
+			matrix_getrgb(m, x    , y + 2, &rbb, NULL, NULL);
+			short newval = (rbl + rbr + rib + rbb) / 4.04;
+			matrix_setrgb(m, x, y, newval, 0, 1);
 		}
 	}
 }
 
-const int width = 100;
-const int height = 80;
-
-inline short getval(short* array, int x, int y) {
-	return array[y * width + x % width];
-}
-
-inline void setval(short* array, int x, int y, short val) {
-	array[y * width + x] = val;
-}
-
-void printarr(short* array) {
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			printf("%4d,", getval(array, x, y));
+/*
+ * Print out the matrix to the given output file (can also be
+ * stdout, stderr).
+ */
+void matrix_print(const struct matrix* m, FILE* output) {
+	fprintf(output, "w: %4d, h: %4d\n", m->width, m->height);
+	for (int y = 0; y < m->height; y++) {
+		for (int x = 0; x < m->width; x++) {
+			fprintf(output, "%6x,", matrix_get(m, x, y));
 		}
-		printf("\n");
+		fprintf(output, "\n");
 	}
-	printf("\n");
+	fprintf(output, "\n");
 }
 
-void update(short* array) {
-	// initialize the bottom row with cruft.
-	for (int x = 0; x < width; x++) {
-		setval(array, x, height - 2, color());
-	}
-
-	//printf("INIT 2nd ROW:\n");
-	//printarr(array);
-
-	// calculate the rest
-	for (int y = 0; y < height - 2; y++) {
-		for (int x = 0; x < width; x++) {
-			short bl = getval(array, x - 1, y + 1);
-			short br = getval(array, x + 1, y + 1);
-			short ib = getval(array, x    , y + 1);
-			short bb = getval(array, x    , y + 2);
-			short newval = (bl + br + ib + bb) / 4.04;
-#if 0
-			printf("now altering %d, %d (has value %d)\n", x, y, getval(array, x, y));
-			printf("\t%d %d %d %d\n", bl, br, ib, bb);
-			printf("\tnewval: %d\n", newval);
-#endif
-			setval(array, x, y, newval);
-		}
-	}
-
-	//printf("UPDATE ALL:\n");
-	//printarr(array);
-}
-
-void burn(SDL_Surface* target, short* array) {
-	update(array);
-
-	int tilewidth  = target->w / width;
-	int tileheight = target->h / height;
+void burn(SDL_Surface* target, const struct matrix* m) {
+	int tilewidth  = target->w / m->width;
+	int tileheight = target->h / m->height;
 
 	// draw it!
-	for (int y = 0; y < height - 3; y++) {
-		for (int x = 0; x < width; x++) {
-			short val = getval(array, x, y);
+	for (int y = 0; y < m->height - 3; y++) {
+		for (int x = 0; x < m->width; x++) {
+			uint8_t r,g,b;
+			matrix_getrgb(m, x, y, &r, &g, &b);
+
 			SDL_Rect rect = {x * tilewidth, y * tileheight, tilewidth, tileheight};
-			SDL_FillRect(target, &rect, SDL_MapRGB(target->format, 0, val, 0));
+			SDL_FillRect(target, &rect, SDL_MapRGB(target->format, 0, r, 0));
 		}
 	}
 }
 
-int main(int argc, char* argv[]) {
+int _main(int argc, char* argv[]) {
 	(void)(argc);
 	(void)(argv);
 
 	srand(time(NULL));
 
 	struct matrix m;
-	matrix_init(&m, 20, 20);
+	matrix_init(&m, 5, 5);
+	matrix_print(&m, stdout);
+	matrix_update(&m);
+	matrix_print(&m, stdout);
 	matrix_free(&m);
 
 	return 0;
 }
 
-int _main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) {
 	(void)(argc);
 	(void)(argv);
 
@@ -158,8 +148,8 @@ int _main(int argc, char* argv[]) {
 		exit(1);
 	}
 
-	short* ss = malloc(width * height * sizeof(short));
-	memset(ss, 0, width * height * sizeof(short));
+	struct matrix m;
+	matrix_init(&m, 200, 100);
 
 	//SDL_Surface* surfPaint = SDL_CreateRGBSurface(0, 200, 200, 32, 0,0,0,0);
 	SDL_Surface* surface = SDL_GetWindowSurface(window);
@@ -188,13 +178,14 @@ int _main(int argc, char* argv[]) {
 			continue;
 		}
 
-		burn(surface, ss);
+		matrix_update(&m);
+		burn(surface, &m);
 
 		SDL_Delay(50);
 		SDL_UpdateWindowSurface(window);
 	}
 
-	free(ss);
+	matrix_free(&m);
 	//SDL_FreeSurface(surfPaint);
 	SDL_FreeSurface(surface);
 	SDL_DestroyWindow(window);
