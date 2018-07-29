@@ -1,3 +1,5 @@
+#include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -20,7 +22,15 @@ struct matrix {
 	int height;
 };
 
-void matrix_init(struct matrix* m, int width, int height) {
+void matrix_init(struct matrix* m, uint32_t width, uint32_t height);
+void matrix_free(struct matrix* m);
+inline uint32_t matrix_get(const struct matrix* m, int x, int y);
+inline void matrix_set(struct matrix* m, int x, int y, uint32_t val);
+inline void matrix_getrgb(const struct matrix* m, int x, int y, uint8_t* r, uint8_t* g, uint8_t* b);
+void matrix_print(const struct matrix* m, FILE* output);
+void matrix_update(struct matrix* m);
+
+void matrix_init(struct matrix* m, uint32_t width, uint32_t height) {
 	m->width = width;
 	m->height = height;
 	m->array = malloc(width * height * sizeof(uint32_t));
@@ -32,10 +42,21 @@ void matrix_free(struct matrix* m) {
 }
 
 inline uint32_t matrix_get(const struct matrix* m, int x, int y) {
+	assert(m != NULL);
+	assert(x >= 0);
+	assert(x <= m->width);
+	assert(y >= 0);
+	assert(y <= m->height);
+
+	// we do a modulo m->width to prevent to go out of bounds.
 	return m->array[y * m->width + x % m->width];
 }
 
 inline void matrix_set(struct matrix* m, int x, int y, uint32_t val) {
+	assert(m != NULL);
+	assert(x >= 0 && x <= m->width);
+	assert(y >= 0 && y <= m->height);
+
 	m->array[y * m->width + x] = val;
 }
 
@@ -45,6 +66,8 @@ inline void matrix_setrgb(struct matrix* m, int x, int y, uint8_t r, uint8_t g, 
 
 inline void matrix_getrgb(const struct matrix* m, int x, int y, uint8_t* r, uint8_t* g, uint8_t* b) {
 	uint32_t val = matrix_get(m, x, y);
+
+	// we may provide NULL pointers to omit assigning values.
 	if (r != NULL) {
 		*r = (uint8_t)((val & 0xFF0000) >> 16);
 	}
@@ -57,6 +80,8 @@ inline void matrix_getrgb(const struct matrix* m, int x, int y, uint8_t* r, uint
 }
 
 void matrix_update(struct matrix* m) {
+	assert(m != NULL);
+
 	// initialize the bottom row with cruft.
 	for (int x = 0; x < m->width; x++) {
 		matrix_setrgb(m, x, m->height - 2, color(), 0x00, 0x00);
@@ -67,13 +92,22 @@ void matrix_update(struct matrix* m) {
 	// calculate the rest
 	for (int y = 0; y < m->height - 2; y++) {
 		for (int x = 0; x < m->width; x++) {
-			uint8_t rbl, rbr, rib, rbb;
+			uint8_t
+				rbl, // red component, below left (x - 1, y + 1)
+				rbr, // red component, below right (x + 1, y + 1)
+				rib, // red component, immediately below (y - 1)
+				rbb; // red component, below-below (y - 2)
+
+			uint8_t exp1, exp2;
 			matrix_getrgb(m, x - 1, y + 1, &rbl, NULL, NULL);
 			matrix_getrgb(m, x + 1, y + 1, &rbr, NULL, NULL);
 			matrix_getrgb(m, x    , y + 1, &rib, NULL, NULL);
 			matrix_getrgb(m, x    , y + 2, &rbb, NULL, NULL);
-			short newval = (rbl + rbr + rib + rbb) / 4.04;
-			matrix_setrgb(m, x, y, newval, 0, 1);
+			matrix_getrgb(m, x - 2, y, &exp1, NULL, NULL);
+			matrix_getrgb(m, x + 3, y, &exp2, NULL, NULL);
+
+			uint16_t newval = (rbl + rbr + rib + rbb) / 4.0000001;
+			matrix_setrgb(m, x, y, newval, 0, 0);
 		}
 	}
 }
@@ -104,25 +138,9 @@ void burn(SDL_Surface* target, const struct matrix* m) {
 			matrix_getrgb(m, x, y, &r, &g, &b);
 
 			SDL_Rect rect = {x * tilewidth, y * tileheight, tilewidth, tileheight};
-			SDL_FillRect(target, &rect, SDL_MapRGB(target->format, 0, r, 0));
+			SDL_FillRect(target, &rect, SDL_MapRGB(target->format, r, g, b));
 		}
 	}
-}
-
-int _main(int argc, char* argv[]) {
-	(void)(argc);
-	(void)(argv);
-
-	srand(time(NULL));
-
-	struct matrix m;
-	matrix_init(&m, 5, 5);
-	matrix_print(&m, stdout);
-	matrix_update(&m);
-	matrix_print(&m, stdout);
-	matrix_free(&m);
-
-	return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -137,7 +155,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	SDL_Window* window = SDL_CreateWindow(
-		"SDL Tutorial",
+		"Fire!",
 		SDL_WINDOWPOS_UNDEFINED,
 		SDL_WINDOWPOS_UNDEFINED,
 		800, 600,
@@ -149,7 +167,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	struct matrix m;
-	matrix_init(&m, 200, 100);
+	matrix_init(&m, 800, 200);
 
 	//SDL_Surface* surfPaint = SDL_CreateRGBSurface(0, 200, 200, 32, 0,0,0,0);
 	SDL_Surface* surface = SDL_GetWindowSurface(window);
@@ -179,9 +197,14 @@ int main(int argc, char* argv[]) {
 		}
 
 		matrix_update(&m);
+
+#ifndef NDEBUG
+		matrix_print(&m, stdout);
+		pause = true;
+#endif
 		burn(surface, &m);
 
-		SDL_Delay(50);
+		SDL_Delay(20);
 		SDL_UpdateWindowSurface(window);
 	}
 
