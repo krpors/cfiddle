@@ -112,6 +112,9 @@ void matrix_update(struct matrix* m) {
 	}
 }
 
+void matrix_update2(struct matrix* m) {
+}
+
 /*
  * Print out the matrix to the given output file (can also be
  * stdout, stderr).
@@ -128,11 +131,11 @@ void matrix_print(const struct matrix* m, FILE* output) {
 }
 
 void burn(SDL_Surface* target, const struct matrix* m) {
-	int tilewidth  = target->w / m->width;
-	int tileheight = target->h / m->height;
+	int tilewidth  = 4;//target->w / m->width;
+	int tileheight = 2;//target->h / m->height;
 
 	// draw it!
-	for (int y = 0; y < m->height - 3; y++) {
+	for (int y = 0; y < m->height; y++) {
 		for (int x = 0; x < m->width; x++) {
 			uint8_t r,g,b;
 			matrix_getrgb(m, x, y, &r, &g, &b);
@@ -167,7 +170,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	struct matrix m;
-	matrix_init(&m, 800, 200);
+	matrix_init(&m, 320, 240);
 
 	//SDL_Surface* surfPaint = SDL_CreateRGBSurface(0, 200, 200, 32, 0,0,0,0);
 	SDL_Surface* surface = SDL_GetWindowSurface(window);
