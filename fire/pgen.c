@@ -8,12 +8,25 @@
 
 #include <SDL.h>
 
+int myrand(int min, int max) {
+	return rand() % (max + 1 - min) + min;
+}
+
+float floatrand(float min, float max) {
+	float scale = rand() / (float) RAND_MAX;
+	return min + scale * (max - min);
+}
+
 struct particle {
-	SDL_Point point;
+	float x;
+	float y;
+	float dx;
+	float dy;
 	uint8_t r;
 	uint8_t g;
 	uint8_t b;
 	uint8_t a;
+	int maxlife;
 	int life;
 };
 
@@ -25,8 +38,11 @@ struct particle* particle_create(int howmuch, int startx, int starty) {
 		struct particle* pp = &p[i];
 		memset(pp, 0, sizeof(struct particle));
 		pp->life = 0;
-		pp->point.x = startx;
-		pp->point.y = starty;
+		pp->maxlife = 0;
+		pp->dx = floatrand(-1.0f, 1.0f);
+		pp->dy = floatrand(0.0f, 1.0f);
+		pp->x = startx;
+		pp->y = starty;
 	}
 	return p;
 }
@@ -34,19 +50,25 @@ struct particle* particle_create(int howmuch, int startx, int starty) {
 void particle_update(struct particle* p, int len) {
 	for (int i = 0; i < len; i++) {
 		struct particle* prt = &p[i];
-		prt->point.x += rand() % 2;
-		prt->point.y += rand() % 2;
-		prt->r = rand() % 255;
-		prt->g = rand() % 255;
-		prt->b = rand() % 255;
+		prt->x += prt->dx;
+		prt->y += prt->dy;
+		// gravity:
+		prt->dy += 0.009f;
+		prt->a = (float)prt->life / (float)prt->maxlife * 255;
 		prt->life--;
 		//printf("\t%d, %d\n", prt->point.x, prt->point.y);
 		//printf("\t%p, size = %d\n", prt, sizeof(prt));
 
 		if (prt->life <= 0) {
-			prt->point.x = 10;
-			prt->point.y = 10;
-			prt->life = rand() % 1000;
+			prt->r = rand() % 255;
+			prt->g = rand() % 255;
+			prt->b = rand() % 255;
+			prt->dx = floatrand(-1.0f, 1.0f);
+			prt->dy = floatrand(0.0f, -1.5f);
+			prt->x = 800/2;
+			prt->y = 600/2/2;
+			prt->maxlife = rand() % 1000;
+			prt->life = prt->maxlife;
 		}
 	}
 }
@@ -79,10 +101,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
 
-	int pcount = 500;
-	struct particle* particles = particle_create(pcount, 10, 10);
+	int pcount = 1000;
+	struct particle* particles = particle_create(pcount, 800/2, 600/2);
 
 	SDL_Event e;
 	bool quit = false;
@@ -115,17 +138,19 @@ int main(int argc, char* argv[]) {
 
 		for (int i = 0; i < pcount; i++) {
 			struct particle* prt = &particles[i];
-			SDL_SetRenderDrawColor(renderer, prt->r, prt->g, prt->b, 255);
-			SDL_RenderDrawPoint(renderer, prt->point.x, prt->point.y);
+			SDL_SetRenderDrawColor(renderer, prt->r, prt->g, prt->b, prt->a);
+			SDL_RenderDrawPoint(renderer, floor(prt->x - 0.5f), floor(prt->y - 0.5f));
+			SDL_RenderDrawPoint(renderer, floor(prt->x - 0.5f), floor(prt->y) + 0.5f);
+			SDL_RenderDrawPoint(renderer, floor(prt->x + 0.5f), floor(prt->y) + 0.5f);
+			SDL_RenderDrawPoint(renderer, floor(prt->x + 0.5f), floor(prt->y) - 0.5f);
 		}
 
 		SDL_RenderPresent(renderer);
 
-		SDL_Delay(10);
+		SDL_Delay(5);
 	}
 
 	particle_free(particles);
-
 
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
