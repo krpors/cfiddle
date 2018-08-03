@@ -8,6 +8,8 @@
 
 #include <SDL.h>
 
+int xmouse = 400, ymouse = 300;
+
 int myrand(int min, int max) {
 	return rand() % (max + 1 - min) + min;
 }
@@ -22,6 +24,8 @@ struct particle {
 	float y;
 	float dx;
 	float dy;
+	int w;
+	int h;
 	uint8_t r;
 	uint8_t g;
 	uint8_t b;
@@ -32,49 +36,54 @@ struct particle {
 
 // TODO stop initializing this cruft by default on the heap. make an init
 // which accepts an array instead.
-struct particle* particle_create(int howmuch, int startx, int starty) {
-	struct particle* p = malloc(howmuch * sizeof(struct particle));
-	for (int i = 0; i < howmuch; i++) {
-		struct particle* pp = &p[i];
-		memset(pp, 0, sizeof(struct particle));
-		pp->life = 0;
-		pp->maxlife = 0;
-		pp->dx = floatrand(-1.0f, 1.0f);
-		pp->dy = floatrand(0.0f, 1.0f);
-		pp->x = startx;
-		pp->y = starty;
-	}
-	return p;
+
+void particle_init(struct particle* pp, float startx, float starty) {
+	memset(pp, 0, sizeof(struct particle));
+
+	pp->r = rand() % 254;
+	pp->g = rand() % 255;
+	pp->b = rand() % 255;
+
+	float distx = ((float)xmouse - 400.0f) / 400.0f;
+	float disty = ((float)ymouse - 300.0f) / 300.0f;
+	pp->dx = floatrand(-distx, distx);
+	pp->dy = floatrand(-disty, disty);
+
+	pp->x = startx;
+	pp->y = starty;
+
+	pp->maxlife = rand() % 1000;
+	pp->life = pp->maxlife;
+
+	int size = myrand(1, 2);
+	pp->w = size;
+	pp->h = size;
 }
 
-void particle_update(struct particle* p, int len) {
-	for (int i = 0; i < len; i++) {
-		struct particle* prt = &p[i];
+void particle_update(struct particle* prt) {
+	prt->a = (float)prt->life / (float)prt->maxlife * 255;
+	prt->life--;
+	//printf("\t%d, %d\n", prt->point.x, prt->point.y);
+	//printf("\t%p, size = %d\n", prt, sizeof(prt));
+	//
+	if (prt->y >= 600 - 4) {
+		prt->y = 600 - 4;
+		prt->dy = 0;
+		prt->dx = 0;
+	} else {
+		prt->w = (float)prt->life / (float)prt->maxlife * 2 + 1;
+		prt->h = (float)prt->life / (float)prt->maxlife * 2 + 1;
 		prt->x += prt->dx;
 		prt->y += prt->dy;
 		// gravity:
 		prt->dy += 0.009f;
-		prt->a = (float)prt->life / (float)prt->maxlife * 255;
-		prt->life--;
-		//printf("\t%d, %d\n", prt->point.x, prt->point.y);
-		//printf("\t%p, size = %d\n", prt, sizeof(prt));
-
-		if (prt->life <= 0) {
-			prt->r = rand() % 255;
-			prt->g = rand() % 255;
-			prt->b = rand() % 255;
-			prt->dx = floatrand(-1.0f, 1.0f);
-			prt->dy = floatrand(0.0f, -1.5f);
-			prt->x = 800/2;
-			prt->y = 600/2/2;
-			prt->maxlife = rand() % 1000;
-			prt->life = prt->maxlife;
-		}
 	}
-}
 
-void particle_free(struct particle* p) {
-	free(p);
+	// When the particle reaches its end of life, reset it
+	// back to the original position with reinitialized parameters.
+	if (prt->life <= 0) {
+		particle_init(prt, 800 / 2, 600 / 2);
+	}
 }
 
 int main(int argc, char* argv[]) {
@@ -104,8 +113,11 @@ int main(int argc, char* argv[]) {
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
 
-	int pcount = 1000;
-	struct particle* particles = particle_create(pcount, 800/2, 600/2);
+	int pcount = 8000;
+	struct particle pzz[pcount];
+	for (int i = 0; i < pcount; i++) {
+		particle_init(&pzz[i], 800 / 2, 600 / 2);
+	}
 
 	SDL_Event e;
 	bool quit = false;
@@ -114,6 +126,10 @@ int main(int argc, char* argv[]) {
 		while (SDL_PollEvent(&e) != 0) {
 			if (e.type == SDL_QUIT) {
 				quit = true;
+			}
+
+			if(e.type == SDL_MOUSEMOTION) {
+				SDL_GetMouseState(&xmouse,&ymouse);
 			}
 
 			switch (e.key.keysym.sym) {
@@ -134,23 +150,27 @@ int main(int argc, char* argv[]) {
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
 		SDL_RenderClear(renderer);
 
-		particle_update(particles, pcount);
 
 		for (int i = 0; i < pcount; i++) {
-			struct particle* prt = &particles[i];
+			particle_update(&pzz[i]);
+		}
+
+		for (int i = 0; i < pcount; i++) {
+			struct particle* prt = &pzz[i];
 			SDL_SetRenderDrawColor(renderer, prt->r, prt->g, prt->b, prt->a);
-			SDL_RenderDrawPoint(renderer, floor(prt->x - 0.5f), floor(prt->y - 0.5f));
-			SDL_RenderDrawPoint(renderer, floor(prt->x - 0.5f), floor(prt->y) + 0.5f);
-			SDL_RenderDrawPoint(renderer, floor(prt->x + 0.5f), floor(prt->y) + 0.5f);
-			SDL_RenderDrawPoint(renderer, floor(prt->x + 0.5f), floor(prt->y) - 0.5f);
+			SDL_Rect rect = {
+				.x = prt->x,
+				.y = prt->y,
+				.w = prt->w,
+				.h = prt->h
+			};
+			SDL_RenderFillRect(renderer, &rect);
 		}
 
 		SDL_RenderPresent(renderer);
 
 		SDL_Delay(5);
 	}
-
-	particle_free(particles);
 
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
