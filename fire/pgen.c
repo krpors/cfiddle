@@ -46,10 +46,10 @@ void particle_init(struct particle* pp, float startx, float starty) {
 	pp->g = rand() % 255;
 	pp->b = rand() % 255;
 
-	float distx = ((float)xmouse - 400.0f) / 400.0f;
-	float disty = ((float)ymouse - 300.0f) / 300.0f;
-	pp->dx = floatrand(-distx, distx);
-	pp->dy = floatrand(-disty, disty);
+	float distx = ((float)xmouse - 400.0f) / 400.0f * 3.2f;
+	float disty = ((float)ymouse - 300.0f) / 300.0f * 3.2f;
+	pp->dx = floatrand(0, distx);
+	pp->dy = floatrand(0, disty);
 
 	pp->x = startx;
 	pp->y = starty;
@@ -57,7 +57,7 @@ void particle_init(struct particle* pp, float startx, float starty) {
 	pp->maxlife = rand() % 1000;
 	pp->life = pp->maxlife;
 
-	int size = myrand(1, 2);
+	int size = myrand(1, 8);
 	pp->w = size;
 	pp->h = size;
 }
@@ -72,15 +72,18 @@ void particle_update(struct particle* prt) {
 		prt->y = 600 - 4;
 		prt->dy = 0;
 		prt->dx = 0;
-	} else {
-		prt->w = (float)prt->life / (float)prt->maxlife * 2 + 1;
-		prt->h = (float)prt->life / (float)prt->maxlife * 2 + 1;
-		prt->x += prt->dx;
-		prt->y += prt->dy;
-		// gravity:
-		prt->dy += 0.009f;
+	}
+	if (prt->x >= 800 - prt->w || prt->x < prt->w - 4) {
+		prt->dx = 0;
 	}
 
+	//prt->w = (float)prt->life / (float)prt->maxlife * 2 + 1;
+	//prt->h = (float)prt->life / (float)prt->maxlife * 2 + 1;
+	prt->x += prt->dx;
+	prt->y += prt->dy;
+	// gravity:
+	prt->dy += 0.009f;
+	
 	// When the particle reaches its end of life, reset it
 	// back to the original position with reinitialized parameters.
 	if (prt->life <= 0) {
@@ -94,7 +97,7 @@ int main(int argc, char* argv[]) {
 
 	srand(time(NULL));
 
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
 		fprintf(stderr, "Cannot init SDL: %s\n", SDL_GetError());
 		exit(1);
 	}
@@ -137,6 +140,9 @@ int main(int argc, char* argv[]) {
 
 			if (e.type == SDL_KEYDOWN) {
 				switch (e.key.keysym.sym) {
+				case SDLK_f:
+					SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
+					break;
 				case SDLK_ESCAPE:
 					debug("escape done");
 					quit = true;
