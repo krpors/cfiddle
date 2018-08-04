@@ -8,6 +8,8 @@
 
 #include <SDL.h>
 
+#define debug(s); fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, s);
+
 int xmouse = 400, ymouse = 300;
 
 int myrand(int min, int max) {
@@ -125,6 +127,7 @@ int main(int argc, char* argv[]) {
 	while (!quit) {
 		while (SDL_PollEvent(&e) != 0) {
 			if (e.type == SDL_QUIT) {
+				debug("type is quit?");
 				quit = true;
 			}
 
@@ -132,14 +135,19 @@ int main(int argc, char* argv[]) {
 				SDL_GetMouseState(&xmouse,&ymouse);
 			}
 
-			switch (e.key.keysym.sym) {
-			case SDLK_ESCAPE: quit = true;    break;
-			case SDLK_SPACE:
-				if (e.key.type == SDL_KEYDOWN) {
-					pause = !pause;
-					printf("pausing: %d\n", pause);
+			if (e.type == SDL_KEYDOWN) {
+				switch (e.key.keysym.sym) {
+				case SDLK_ESCAPE:
+					debug("escape done");
+					quit = true;
+					break;
+				case SDLK_SPACE:
+					if (e.key.type == SDL_KEYDOWN) {
+						pause = !pause;
+						printf("pausing: %d\n", pause);
+					}
+					break;
 				}
-				break;
 			}
 		}
 
@@ -172,6 +180,7 @@ int main(int argc, char* argv[]) {
 		SDL_Delay(5);
 	}
 
+	debug("destroying stuff, we're out of the loop");
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
