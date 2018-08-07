@@ -42,9 +42,9 @@ struct particle {
 void particle_init(struct particle* pp, float startx, float starty) {
 	memset(pp, 0, sizeof(struct particle));
 
-	pp->r = rand() % 254;
-	pp->g = rand() % 255;
-	pp->b = rand() % 255;
+	pp->r = 255;
+	pp->g = 0;//rand() % 80;
+	pp->b = 0;//rand() % 80;
 
 	float distx = ((float)xmouse - 400.0f) / 400.0f * 3.2f;
 	float disty = ((float)ymouse - 300.0f) / 300.0f * 3.2f;
@@ -54,16 +54,20 @@ void particle_init(struct particle* pp, float startx, float starty) {
 	pp->x = startx;
 	pp->y = starty;
 
-	pp->maxlife = rand() % 1000;
+	pp->maxlife = rand() % 400;
 	pp->life = pp->maxlife;
 
-	int size = myrand(1, 8);
+	int size = myrand(4, 4);
 	pp->w = size;
 	pp->h = size;
 }
 
 void particle_update(struct particle* prt) {
-	prt->a = (float)prt->life / (float)prt->maxlife * 255;
+	float percentageLife = (float)prt->life / (float)prt->maxlife;
+	prt->r = 255;//percentageLife * 255;
+	prt->g = 255 - (percentageLife * 255);
+	//prt->b = 155 - (percentageLife * 155);
+	prt->a = percentageLife * 255;
 	prt->life--;
 	//printf("\t%d, %d\n", prt->point.x, prt->point.y);
 	//printf("\t%p, size = %d\n", prt, sizeof(prt));
@@ -163,7 +167,6 @@ int main(int argc, char* argv[]) {
 
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
 		SDL_RenderClear(renderer);
-
 
 		for (int i = 0; i < pcount; i++) {
 			particle_update(&pzz[i]);
