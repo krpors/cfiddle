@@ -12,11 +12,11 @@
  * 'Simple' hash function. See http://www.cse.yorku.ca/~oz/hash.html,
  * and http://stackoverflow.com/questions/7666509/hash-function-for-string
  */
-static unsigned long hash_djb2(const char* str) {
+static unsigned long hash_djb2(const void* key, size_t key_len) {
 	unsigned long hash = 5381;
-	int c;
-	while ((c = *str++)) {
-		hash = ((hash << 5) + hash) + c;
+	const unsigned char* p = key;
+	for (size_t i = 0; i < key_len; i++) {
+		hash = ((hash << 5) + hash) + p[i];
 	}
 
 	return hash;
@@ -33,9 +33,9 @@ struct hashtable* hashtable_create(unsigned int cap, float lf) {
 }
 
 
-void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
+void hashtable_set(struct hashtable** ht, const void* key, size_t key_len, const void* val, size_t val_len) {
 	// calculate hash, then mod it with the table's size to determine the bucket.
-	unsigned long hash = hash_djb2(key);
+	unsigned long hash = hash_djb2(key, key_len);
 	int bucket = hash % (*ht)->cap; // will result in a bucket between [0, (*ht)->cap).
 
 	struct entry* next = (*ht)->table[bucket];
@@ -46,9 +46,17 @@ void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
 		fprintf(stderr, "Bucket %d is empty, creating new one\n", bucket);
 #endif
 		struct entry* e = malloc(sizeof(struct entry));
-		e->key  = strdup(key);
-		e->val  = strdup(val);
+
+		e->key  = malloc(key_len);
+		e->key_len = key_len;
+		memcpy(e->key, key, key_len);
+
+		e->val  = malloc(val_len);
+		e->val_len = val_len;
+		memcpy(e->val, val, val_len);
+
 		e->next = NULL;
+
 		(*ht)->table[bucket] = e;
 		(*ht)->entries++;
 		return;
@@ -63,12 +71,13 @@ void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
 
 		// Check if the requested key equals the key in the current entry.
 		// If so, the value will be replaced.
-		if (strcmp(key, next->key) == 0) {
+		if (memcmp(key, next->key, key_len) == 0) {
 #ifndef NDEBUG
 			fprintf(stderr, "Bucket %d [%s = %s] will be replaced with [%s = %s]\n", bucket, next->key, next->val, key, val);
 #endif
 			free(next->val);
-			next->val = strdup(val);
+			next->val  = malloc(val_len);
+			memcpy(next->val, val, val_len);
 			return;
 		}
 	}
@@ -79,8 +88,14 @@ void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
 	fprintf(stderr,"Bucket %d contained hash collision, so appending new node to end\n", bucket);
 #endif
 	struct entry* e = malloc(sizeof(struct entry));
-	e->key = strdup(key);
-	e->val = strdup(val);
+	e->key     = malloc(key_len);
+	e->key_len = key_len;
+	memcpy(e->key, key, key_len);
+
+	e->val     = malloc(val_len);
+	e->val_len = val_len;
+	memcpy(e->val, val, val_len);
+
 	e->next = NULL;
 
 	// Update the last element to point to the newly created entry.
@@ -91,21 +106,21 @@ void hashtable_set(struct hashtable** ht, const char* key, const char* val) {
 }
 
 
-const char* hashtable_get(const struct hashtable* ht, const char* key) {
-	unsigned long hash = hash_djb2(key);
+const struct entry* hashtable_get(const struct hashtable* ht, const void* key, size_t key_len) {
+	unsigned long hash = hash_djb2(key, key_len);
 	int bucket = hash % ht->cap;
 
 	for (struct entry* entry = ht->table[bucket]; entry != NULL; entry = entry->next) {
-		if (strcmp(key, entry->key) == 0) {
-			return entry->val;
+		if (memcmp(key, entry->key, key_len) == 0) {
+			return entry;
 		}
 	}
 	return NULL;
 }
 
 
-bool hashtable_remove(struct hashtable* ht, const char* key) {
-	unsigned long hash = hash_djb2(key);
+bool hashtable_remove(struct hashtable* ht, const void* key, size_t key_len) {
+	unsigned long hash = hash_djb2(key, key_len);
 	int bucket = hash % ht->cap;
 	struct entry* first = ht->table[bucket];
 	struct entry* prev  = NULL;
@@ -157,13 +172,18 @@ void hashtable_free(struct hashtable* ht) {
 			printf("Freeing key '%s' with value '%s'\n", curr->key, curr->val);
 #endif
 			free(curr->key);
+			curr->key = NULL;
 			free(curr->val);
+			curr->val = NULL;
 			free(curr);
+			curr = NULL;
 		}
 	}
 
 	free(ht->table);
+	ht->table = NULL;
 	free(ht);
+	ht = NULL;
 }
 
 
@@ -185,7 +205,8 @@ void hashtable_resize(struct hashtable** ht) {
 	// iterate over all buckets and keys, re-add them.
 	for (unsigned int i = 0; i < (*ht)->cap; i++) {
 		for (struct entry* next = (*ht)->table[i]; next != NULL; next = next->next) {
-			hashtable_set(&rehashed, next->key, next->val);
+			printf("%s (%li) = %s (%li)\n", (char*)next->key, next->key_len, (char*)next->val, next->val_len);
+			hashtable_set(&rehashed, next->key, next->key_len, next->val, next->val_len);
 		}
 	}
 	
@@ -195,30 +216,30 @@ void hashtable_resize(struct hashtable** ht) {
 	*ht = rehashed;
 }
 
-void hashtable_for_each(const struct hashtable* ht, void (*callback)(const char* k, const char* v)) {
+void hashtable_for_each(const struct hashtable* ht, void (*callback)(const struct entry*)) {
 	// iterate over all buckets
 	for (unsigned int i = 0; i < ht->cap; i++) {
 		// iterate over every entry in the bucket
 		for (struct entry* next = ht->table[i]; next != NULL; next = next->next) {
-			(*callback)(next->key, next->val);
+			(*callback)(next);
 		}
 	}
 }
 
-void thecallback(const char* key, const char* val) {
-	printf("%s = %s\n", key, val);
+void thecallback(const struct entry* e) {
+	printf("entry! %s -> %s\n", (char*)e->key, (char*)e->val);
 }
 
 void test1() {
 	srand(time(NULL));
 	struct hashtable* tbl = hashtable_create(2, 0.75);
-	int max = 200000;
+	int max = 20000;
 	for (int i = 0; i < max; i++) {
 		char key[16];
 		char val[16];
 		snprintf(key, 16, "key_%d_%d", i, rand());
 		snprintf(val, 16, "val_%d_%d", i, rand());
-		hashtable_set(&tbl, key, val);
+		hashtable_set(&tbl, key, strlen(key) + 1, val, strlen(val) + 1);
 	}
 	printf("Inserted %d items. Bucket size is %d\n", max, tbl->cap);
 
@@ -227,6 +248,7 @@ void test1() {
 	hashtable_free(tbl);
 }
 
+#if 0
 void test2() {
 	srand(time(NULL));
 	struct hashtable* tbl = hashtable_create(16, 0.75);
@@ -253,8 +275,9 @@ void test2() {
 
 	hashtable_free(tbl);
 }
+#endif
 
 int main(/*int argc, char* argv[]*/) {
-	test2();
+	test1();
 	return 0;
 }
